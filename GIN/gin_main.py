@@ -15,7 +15,17 @@ from torch_geometric.utils import add_self_loops, degree
 from tqdm import tqdm
 from gin import Net
 
-device = torch.device("cuda:5")
+import os
+import numpy as np
+
+def get_freer_gpu():
+    os.system("nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp_mem_file")
+    memory_available = [int(x.split()[2]) for x in open("tmp", "r").readlines()]
+    os.system("rm tmp_mem_file")
+    return np.argmax(memory_available)
+
+
+device = torch.device(f"cuda:{get_freer_gpu()}")
 
 # smiles2graph takes a SMILES string as input and returns a graph object
 # requires rdkit to be installed.
@@ -91,7 +101,7 @@ def eval(model, evaluator):
 
 net = Net()
 net.to(device)
-# net.load_state_dict(torch.load("GIN/Saves/GIN.pth"))
+net.load_state_dict(torch.load("GIN/Saves/GIN.pth"))
 
 criterion = torch.nn.L1Loss()
 optimizer = torch.optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
@@ -103,7 +113,7 @@ lmbda = lambda epoch: 0.65 ** epoch
 scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
 evaluator = PCQM4MEvaluator()
 
-train(net, criterion, optimizer, 10, scheduler=scheduler)
+# train(net, criterion, optimizer, 10, scheduler=scheduler)
 eval(net, evaluator)
 
 # 0.784012496471405 without edges after 1 epoch
