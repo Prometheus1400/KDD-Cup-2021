@@ -18,9 +18,12 @@ from gin import Net
 import os
 import numpy as np
 
+
 def get_freer_gpu():
     os.system("nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp_mem_file")
-    memory_available = [int(x.split()[2]) for x in open("tmp", "r").readlines()]
+    memory_available = [
+        int(x.split()[2]) for x in open("tmp_mem_file", "r").readlines()
+    ]
     os.system("rm tmp_mem_file")
     return np.argmax(memory_available)
 
@@ -104,7 +107,7 @@ net.to(device)
 net.load_state_dict(torch.load("GIN/Saves/GIN.pth"))
 
 criterion = torch.nn.L1Loss()
-optimizer = torch.optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
+optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 # TEST
 # scheduler = torch.optim.lr_scheduler.OneCycleLR(
 #     optimizer, max_lr=0.1, steps_per_epoch=10, epochs=10, anneal_strategy="linear"
@@ -113,7 +116,7 @@ lmbda = lambda epoch: 0.65 ** epoch
 scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
 evaluator = PCQM4MEvaluator()
 
-# train(net, criterion, optimizer, 10, scheduler=scheduler)
+train(net, criterion, optimizer, 10, scheduler=scheduler)
 eval(net, evaluator)
 
 # 0.784012496471405 without edges after 1 epoch
