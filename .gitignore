@@ -3,3 +3,5 @@ ogb
 */__pycache__
 tmp_mem_file
 gpu_check.py
+temp.cpp
+a.out

@@ -32,8 +32,8 @@ class GIN_Layer(MessagePassing):
         # Step 4-5: Start propagating messages.
         return x
 
-    def message(self, x_j, edge_attr, x_i):
+    def message(self, x_j, edge_attr):
         return F.relu(x_j + edge_attr)
-
+        
     def update(self, aggr_out):
         return aggr_out

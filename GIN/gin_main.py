@@ -54,7 +54,11 @@ bond_encoder = BondEncoder(emb_dim=100)  # Pytorch Module class w/ learnable par
 def train(model, loss, optimizer, epochs, save=True, scheduler=None):
     for epoch in range(epochs):  # loop over the dataset multiple times
         running_loss = 0.0
-        for i, batch in enumerate(tqdm(train_loader, desc=f"Iteration {epoch}")):
+        prev_loss = 1000.0
+        pbar = tqdm(
+            train_loader, desc="Epoch 0", bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}"
+        )
+        for i, batch in enumerate(pbar):
             batch = batch.to(device)
 
             # zero the parameter gradients
@@ -70,7 +74,13 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None):
             # print statistics
             running_loss += loss.item()
             if i % 2000 == 1999:  # print every 2000 mini-batches
-                print("[%d, %5d] loss: %.3f" % (epoch + 1, i + 1, running_loss / 2000))
+                # print(f"[{epoch+1}], [{i+1}] loss: {running_loss/2000}")
+                loss = round(running_loss / 2000, 3)
+                # each slope "step" is 2000 iterations
+                pbar.set_description(
+                    f"Epoch {epoch}: Loss {loss}: Slope {round((loss - prev_loss),4)} "
+                )
+                prev_loss = loss
                 running_loss = 0.0
 
         if scheduler != None:
@@ -86,7 +96,7 @@ def eval(model, evaluator):
     with torch.no_grad():
         y_true = []
         y_pred = []
-        for data in tqdm(valid_loader, desc="Iteration"):
+        for data in tqdm(valid_loader, desc="Evalutating"):
             data = data.to(device)
             outputs = model(data, eval=True).view(-1)
             y_true.append(data.y.view(outputs.shape).detach().cpu())
@@ -104,7 +114,7 @@ def eval(model, evaluator):
 
 net = Net()
 net.to(device)
-net.load_state_dict(torch.load("GIN/Saves/GIN.pth"))
+# net.load_state_dict(torch.load("GIN/Saves/GIN.pth"))
 
 criterion = torch.nn.L1Loss()
 optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
@@ -116,9 +126,8 @@ lmbda = lambda epoch: 0.65 ** epoch
 scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
 evaluator = PCQM4MEvaluator()
 
-train(net, criterion, optimizer, 10, scheduler=scheduler)
+train(net, criterion, optimizer, 10, scheduler=scheduler, save=True)
 eval(net, evaluator)
 
-# 0.784012496471405 without edges after 1 epoch
-# 0.783663272857666 with edges (not embedded) after 1 epoch
-# 0.8013435006141663 with edges (embedded) after 1 epoch
+# 3:Code is without sourcenodeinfo
+# 4:Code is with sourcenodeinfo

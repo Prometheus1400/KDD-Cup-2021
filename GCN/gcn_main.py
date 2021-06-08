@@ -14,8 +14,20 @@ from torch_geometric.nn import (
 from torch_geometric.utils import add_self_loops, degree
 from tqdm import tqdm
 from gcn import Net
+import os
+import numpy as np
 
-device = torch.device("cuda:5")
+
+def get_freer_gpu():
+    os.system("nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp_mem_file")
+    memory_available = [
+        int(x.split()[2]) for x in open("tmp_mem_file", "r").readlines()
+    ]
+    os.system("rm tmp_mem_file")
+    return np.argmax(memory_available)
+
+
+device = torch.device(f"cuda:{get_freer_gpu()}")
 
 # smiles2graph takes a SMILES string as input and returns a graph object
 # requires rdkit to be installed.
@@ -41,7 +53,11 @@ bond_encoder = BondEncoder(emb_dim=100)  # Pytorch Module class w/ learnable par
 def train(model, loss, optimizer, epochs, save=True, scheduler=None):
     for epoch in range(epochs):  # loop over the dataset multiple times
         running_loss = 0.0
-        for i, batch in enumerate(tqdm(train_loader, desc=f"Iteration {epoch}")):
+        prev_loss = 1000.0
+        pbar = tqdm(
+            train_loader, desc="Epoch 0", bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}"
+        )
+        for i, batch in enumerate(pbar):
             batch = batch.to(device)
 
             # zero the parameter gradients
@@ -57,7 +73,13 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None):
             # print statistics
             running_loss += loss.item()
             if i % 2000 == 1999:  # print every 2000 mini-batches
-                print("[%d, %5d] loss: %.3f" % (epoch + 1, i + 1, running_loss / 2000))
+                # print(f"[{epoch+1}], [{i+1}] loss: {running_loss/2000}")
+                loss = round(running_loss / 2000, 3)
+                # each slope "step" is 2000 iterations
+                pbar.set_description(
+                    f"Epoch {epoch}: Loss {loss}: Slope {round((loss - prev_loss),4)} "
+                )
+                prev_loss = loss
                 running_loss = 0.0
 
         if scheduler != None:
@@ -65,7 +87,7 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None):
 
     print("Finished Training")
     if save:
-        torch.save(net.state_dict(), "GCN/Saves/GCN_WithEdge_LowestLR_TEST.pth")
+        torch.save(net.state_dict(), "GCN/Saves/GCN_WithEdge_10epochs.pth")
         print("Saved")
 
 
@@ -96,12 +118,11 @@ net.to(device)
 criterion = torch.nn.L1Loss()
 optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 # TEST
-scheduler = torch.optim.lr_scheduler.OneCycleLR(
-    optimizer, max_lr=0.1, steps_per_epoch=10, epochs=10, anneal_strategy="linear"
-)
+lmbda = lambda epoch: 0.65 ** epoch
+scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
 evaluator = PCQM4MEvaluator()
 
-train(net, criterion, optimizer, 1, scheduler=None)
+train(net, criterion, optimizer, 10, scheduler=scheduler)
 eval(net, evaluator)
 
 # 0.784012496471405 without edges after 1 epoch
