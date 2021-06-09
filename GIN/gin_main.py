@@ -43,20 +43,27 @@ dataset = PygPCQM4MDataset(
 )
 
 split_idx = dataset.get_idx_split()
-train_loader = DataLoader(dataset[split_idx["train"]], batch_size=32, shuffle=True)
-valid_loader = DataLoader(dataset[split_idx["valid"]], batch_size=32, shuffle=False)
-test_loader = DataLoader(dataset[split_idx["test"]], batch_size=32, shuffle=False)
-
-atom_encoder = AtomEncoder(emb_dim=100)  # Pytorch Module class w/ learnable parameters
-bond_encoder = BondEncoder(emb_dim=100)  # Pytorch Module class w/ learnable parameters
+batch_size = 256
+train_loader = DataLoader(
+    dataset[split_idx["train"]], batch_size=batch_size, shuffle=True
+)
+valid_loader = DataLoader(
+    dataset[split_idx["valid"]], batch_size=batch_size, shuffle=False
+)
+test_loader = DataLoader(
+    dataset[split_idx["test"]], batch_size=batch_size, shuffle=False
+)
 
 
 def train(model, loss, optimizer, epochs, save=True, scheduler=None):
+    model.train()
     for epoch in range(epochs):  # loop over the dataset multiple times
         running_loss = 0.0
         prev_loss = 1000.0
         pbar = tqdm(
-            train_loader, desc="Epoch 0", bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}"
+            train_loader,
+            desc=f"Epoch {epoch}",
+            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
         )
         for i, batch in enumerate(pbar):
             batch = batch.to(device)
@@ -73,9 +80,9 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None):
 
             # print statistics
             running_loss += loss.item()
-            if i % 2000 == 1999:  # print every 2000 mini-batches
+            if i % 200 == 199:  # print every 2000 mini-batches
                 # print(f"[{epoch+1}], [{i+1}] loss: {running_loss/2000}")
-                loss = round(running_loss / 2000, 3)
+                loss = round(running_loss / 200, 3)
                 # each slope "step" is 2000 iterations
                 pbar.set_description(
                     f"Epoch {epoch}: Loss {loss}: Slope {round((loss - prev_loss),4)} "
@@ -88,17 +95,18 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None):
 
     print("Finished Training")
     if save:
-        torch.save(net.state_dict(), "GIN/Saves/GIN_10_epochs.pth")
+        torch.save(net.state_dict(), "GIN/Saves/GIN_100_epochs.pth")
         print("Saved")
 
 
 def eval(model, evaluator):
+    model.eval()
     with torch.no_grad():
         y_true = []
         y_pred = []
         for data in tqdm(valid_loader, desc="Evalutating"):
             data = data.to(device)
-            outputs = model(data, eval=True).view(-1)
+            outputs = model(data).view(-1)
             y_true.append(data.y.view(outputs.shape).detach().cpu())
             y_pred.append(outputs.detach().cpu())
 
@@ -112,21 +120,30 @@ def eval(model, evaluator):
     print(result_dict["mae"])
 
 
-net = Net()
+net = Net(
+    num_tasks=1,
+    num_layers=5,
+    emb_dim=300,
+    gnn_type="gin",
+    drop_ratio=0.4,
+    graph_pooling="sum",
+    JK="last",
+    residual=False,
+)
 net.to(device)
-# net.load_state_dict(torch.load("GIN/Saves/GIN.pth"))
+# net.load_state_dict(torch.load("GIN/Saves/GIN_10_epochs.pth"))
 
 criterion = torch.nn.L1Loss()
-optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 # TEST
 # scheduler = torch.optim.lr_scheduler.OneCycleLR(
 #     optimizer, max_lr=0.1, steps_per_epoch=10, epochs=10, anneal_strategy="linear"
 # )
-lmbda = lambda epoch: 0.65 ** epoch
+lmbda = lambda epoch: 0.9857431744 ** epoch
 scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
 evaluator = PCQM4MEvaluator()
 
-train(net, criterion, optimizer, 10, scheduler=scheduler, save=True)
+train(net, criterion, optimizer, 100, scheduler=scheduler, save=True)
 eval(net, evaluator)
 
 # 3:Code is without sourcenodeinfo
