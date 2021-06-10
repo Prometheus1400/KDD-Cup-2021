@@ -1,17 +1,8 @@
 # conda activate my-rdkit-env
 from ogb.lsc import PygPCQM4MDataset, PCQM4MEvaluator
 from ogb.utils import smiles2graph
-from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 from torch_geometric.data import DataLoader
 import torch
-from torch.nn import ReLU, Dropout
-from torch_geometric.nn import (
-    MessagePassing,
-    global_max_pool,
-    global_mean_pool,
-    GCNConv,
-)
-from torch_geometric.utils import add_self_loops, degree
 from tqdm import tqdm
 from gin import Net
 
@@ -62,7 +53,7 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None):
         prev_loss = 1000.0
         pbar = tqdm(
             train_loader,
-            desc=f"Epoch {epoch}",
+            desc=f"Epoch {epoch}: Loss NAN: Slope NAN: LR NAN ",
             bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
         )
         for i, batch in enumerate(pbar):
@@ -84,18 +75,19 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None):
                 # print(f"[{epoch+1}], [{i+1}] loss: {running_loss/2000}")
                 loss = round(running_loss / 200, 3)
                 # each slope "step" is 2000 iterations
+                lr = optimizer.param_groups[0]["lr"]
                 pbar.set_description(
-                    f"Epoch {epoch}: Loss {loss}: Slope {round((loss - prev_loss),4)} "
+                    f"Epoch {epoch}: Loss {loss}: Slope {round((loss - prev_loss),4)}: LR {lr} "
                 )
                 prev_loss = loss
                 running_loss = 0.0
 
-        if scheduler != None:
+        if scheduler != None and epoch != 0 and epoch % 30 == 0:
             scheduler.step()
 
     print("Finished Training")
     if save:
-        torch.save(net.state_dict(), "GIN/Saves/GIN_100_epochs.pth")
+        torch.save(net.state_dict(), "GIN/Saves/GIN_100_epochs_ReduceLRonPlateue.pth")
         print("Saved")
 
 
@@ -125,26 +117,31 @@ net = Net(
     num_layers=5,
     emb_dim=300,
     gnn_type="gin",
-    drop_ratio=0.4,
+    drop_ratio=0,
     graph_pooling="sum",
     JK="last",
     residual=False,
 )
 net.to(device)
-# net.load_state_dict(torch.load("GIN/Saves/GIN_10_epochs.pth"))
+# net.load_state_dict(torch.load("GIN/Saves/GIN_100_epochs_initBatchNorm.pth"))
 
 criterion = torch.nn.L1Loss()
 optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-# TEST
-# scheduler = torch.optim.lr_scheduler.OneCycleLR(
-#     optimizer, max_lr=0.1, steps_per_epoch=10, epochs=10, anneal_strategy="linear"
-# )
-lmbda = lambda epoch: 0.9857431744 ** epoch
-scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
+# lmbda = lambda epoch: 0.25 ** epoch
+# scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode="min",
+    factor=0.25,
+    patience=10,
+    threshold=0.0001,
+    threshold_mode="rel",
+    cooldown=0,
+    min_lr=0,
+    eps=1e-08,
+    verbose=True,
+)
 evaluator = PCQM4MEvaluator()
 
 train(net, criterion, optimizer, 100, scheduler=scheduler, save=True)
 eval(net, evaluator)
-
-# 3:Code is without sourcenodeinfo
-# 4:Code is with sourcenodeinfo

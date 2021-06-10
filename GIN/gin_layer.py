@@ -43,7 +43,15 @@ class GIN_Layer(MessagePassing):
 class GNN_Node(torch.nn.Module):
     """ Generates Node Embedding """
 
-    def __init__(self,conv_type,emb_dim,num_layers,dropout_ratio=0.4,residual=False,JK="last",):
+    def __init__(
+        self,
+        conv_type,
+        emb_dim,
+        num_layers,
+        dropout_ratio=0.4,
+        residual=False,
+        JK="last",
+    ):
         """ JK: Last, Sum """
         super(GNN_Node, self).__init__()
         self.conv_type = conv_type
@@ -53,6 +61,7 @@ class GNN_Node(torch.nn.Module):
         self.residual = residual
         self.JK = JK
         self.atom_encoder = AtomEncoder(emb_dim)
+        # self.init_batch_norm = torch.nn.BatchNorm1d(emb_dim)
 
         self.convs = torch.nn.ModuleList()
         self.batch_norms = torch.nn.ModuleList()
@@ -82,7 +91,7 @@ class GNN_Node(torch.nn.Module):
             if self.residual:
                 emb += embedding_list[layer]
             embedding_list.append(emb)
-        
+
         if self.JK == "last":
             final = embedding_list[-1]
         elif self.JK == "sum":
@@ -93,6 +102,5 @@ class GNN_Node(torch.nn.Module):
             final = embedding_list[0] + embedding_list[-1]
         else:
             ValueError(f"Invalid JK connetion: {self.JK}")
-        
+
         return final
-        

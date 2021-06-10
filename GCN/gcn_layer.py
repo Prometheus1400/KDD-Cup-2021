@@ -2,6 +2,7 @@ from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 import torch
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, degree
+import torch.nn.functional as F
 
 
 class CNN_Layer(MessagePassing):
@@ -32,11 +33,11 @@ class CNN_Layer(MessagePassing):
         # Step 4-5: Start propagating messages.
         return self.propagate(edge_index, x=x, norm=norm, edge_attr=edge_embedding)
 
-    def message(self, x_j, norm):
+    def message(self, x_j, norm, edge_attr):
         # x_j has shape [E, out_channels]
 
         # Step 4: Normalize node features.
-        return norm.view(-1, 1) * x_j
+        return norm.view(-1, 1) * F.relu(x_j + edge_attr)
 
     def update(self, aggr_out):
         return aggr_out
