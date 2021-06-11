@@ -5,6 +5,41 @@ from torch_geometric.utils import add_self_loops, degree
 import torch.nn.functional as F
 
 
+class GCN_Layer(MessagePassing):
+    def __init__(self, emb_dim):
+        super(GCN_Layer, self).__init__(aggr="add")
+        self.lin = torch.nn.Linear(emb_dim, emb_dim)
+        self.root_emb = torch.nn.Embedding(1, emb_dim)
+        self.bond_encoder = BondEncoder(emb_dim)
+
+    def forward(self, x, edge_index, edge_attr):
+        edge_embedding = self.bond_encoder(edge_attr)
+        # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+        # Step 2: Linearly transform node feature matrix.
+        x = self.lin(x)
+
+        # Step 3: Compute normalization.
+        row, col = edge_index
+        deg = degree(col, x.size(0), dtype=x.dtype) + 1
+        deg_inv_sqrt = deg.pow(-0.5)
+        deg_inv_sqrt[deg_inv_sqrt == float("inf")] = 0
+        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
+
+        # Step 4-5: Start propagating messages.
+        return self.propagate(
+            edge_index, x=x, norm=norm, edge_attr=edge_embedding
+        ) + F.relu(x + self.root_emb.weight) * 1.0 / deg.view(-1, 1)
+
+    def message(self, x_j, norm, edge_attr):
+        # x_j has shape [E, out_channels]
+
+        # Step 4: Normalize node features.
+        return norm.view(-1, 1) * F.relu(x_j + edge_attr)
+
+    def update(self, aggr_out):
+        return aggr_out
+
+
 class GIN_Layer(MessagePassing):
     """ Convolution / Message Passing Layer"""
 
@@ -64,11 +99,13 @@ class GNN_Node(torch.nn.Module):
         # self.init_batch_norm = torch.nn.BatchNorm1d(emb_dim)
 
         self.convs = torch.nn.ModuleList()
+        # self.gcn_convs = torch.nn.ModuleList()
         self.batch_norms = torch.nn.ModuleList()
 
         for _ in range(num_layers):
             if conv_type == "gin":
                 self.convs.append(GIN_Layer(emb_dim))
+                # self.gcn_convs.append(GCN_Layer(emb_dim))
             else:
                 ValueError(f"Undefined GNN type called {conv_type}")
             self.batch_norms.append(torch.nn.BatchNorm1d(emb_dim))
@@ -81,7 +118,8 @@ class GNN_Node(torch.nn.Module):
         for layer in range(self.num_layers):
 
             emb = self.convs[layer](embedding_list[layer], edge_index, edge_attr)
-            emb = self.batch_norms[layer](emb)
+            # emb2 = self.gcn_convs[layer](embedding_list[layer], edge_index, edge_attr)
+            emb = self.batch_norms[layer](F.relu(emb))
 
             if layer == (self.num_layers - 1):
                 emb = F.dropout(emb, self.dropout_ratio, training=self.training)

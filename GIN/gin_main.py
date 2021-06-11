@@ -46,7 +46,7 @@ test_loader = DataLoader(
 )
 
 
-def train(model, loss, optimizer, epochs, save=True, scheduler=None):
+def train(model, loss, optimizer, epochs, save=True, scheduler=None, evaluator=None):
     model.train()
     for epoch in range(epochs):  # loop over the dataset multiple times
         running_loss = 0.0
@@ -81,13 +81,15 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None):
                 )
                 prev_loss = loss
                 running_loss = 0.0
+        if evaluator != None and epoch > 0 and epoch % 10 == 0:
+            eval(net, evaluator)
 
-        if scheduler != None and epoch != 0 and epoch % 30 == 0:
+        if scheduler != None and epoch > 0 and epoch % 30 == 0:
             scheduler.step()
 
     print("Finished Training")
     if save:
-        torch.save(net.state_dict(), "GIN/Saves/GIN_100_epochs_ReduceLRonPlateue.pth")
+        torch.save(net.state_dict(), "GIN/Saves/GIN_GCN_Combo_withRELU.pth")
         print("Saved")
 
 
@@ -123,25 +125,25 @@ net = Net(
     residual=False,
 )
 net.to(device)
-# net.load_state_dict(torch.load("GIN/Saves/GIN_100_epochs_initBatchNorm.pth"))
+# net.load_state_dict(torch.load("GIN/Saves/GIN_100_epochs_no_dropout.pth"))
 
 criterion = torch.nn.L1Loss()
 optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-# lmbda = lambda epoch: 0.25 ** epoch
-# scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer,
-    mode="min",
-    factor=0.25,
-    patience=10,
-    threshold=0.0001,
-    threshold_mode="rel",
-    cooldown=0,
-    min_lr=0,
-    eps=1e-08,
-    verbose=True,
-)
+lmbda = lambda epoch: 0.25 ** epoch
+scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
+# scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+#     optimizer,
+#     mode="min",
+#     factor=0.25,
+#     patience=10,
+#     threshold=0.0001,
+#     threshold_mode="rel",
+#     cooldown=0,
+#     min_lr=0,
+#     eps=1e-08,
+#     verbose=True,
+# )
 evaluator = PCQM4MEvaluator()
 
-train(net, criterion, optimizer, 100, scheduler=scheduler, save=True)
+train(net, criterion, optimizer, 100, scheduler=scheduler, save=True, evaluator=None)
 eval(net, evaluator)
