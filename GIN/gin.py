@@ -1,7 +1,7 @@
 import torch
 from torch.nn import ReLU, Dropout
 from torch_geometric.nn import global_max_pool, global_add_pool
-from gin_layer import GNN_Node
+from gin_layer import GNN_Node, GNN_Node_Virtualnode
 from ogb.graphproppred.mol_encoder import AtomEncoder
 
 
@@ -16,9 +16,13 @@ class Net(torch.nn.Module):
         drop_ratio=0,
         JK="last",
         graph_pooling="sum",
+        virtual_node=False
     ):
         super(Net, self).__init__()
-        self.gnn_node = GNN_Node(gnn_type, emb_dim, num_layers, drop_ratio, residual, JK)
+        if virtual_node:
+            self.gnn_node = GNN_Node_Virtualnode(num_layers, emb_dim, drop_ratio, JK, residual, gnn_type)
+        else:
+            self.gnn_node = GNN_Node(gnn_type, emb_dim, num_layers, drop_ratio, residual, JK)
         self.lin_graph_pred = torch.nn.Linear(emb_dim, num_tasks)
 
         if graph_pooling == "sum":

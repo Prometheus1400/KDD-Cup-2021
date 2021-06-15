@@ -89,7 +89,7 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None, evaluator=N
 
     print("Finished Training")
     if save:
-        torch.save(net.state_dict(), "GIN/Saves/GIN_GCN_Combo_withRELU.pth")
+        torch.save(net.state_dict(), "GIN/Saves/GIN_weightedJKsum.pth")
         print("Saved")
 
 
@@ -121,11 +121,12 @@ net = Net(
     gnn_type="gin",
     drop_ratio=0,
     graph_pooling="sum",
-    JK="last",
+    JK="weighted_sum",
     residual=False,
+    virtual_node=False
 )
 net.to(device)
-# net.load_state_dict(torch.load("GIN/Saves/GIN_100_epochs_no_dropout.pth"))
+# net.load_state_dict(torch.load("/GIN/Saves/GIN_VirtualNode.pth"))
 
 criterion = torch.nn.L1Loss()
 optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
