@@ -103,6 +103,10 @@ class GNN_Node(torch.nn.Module):
         elif self.JK == "weighted_sum":
             final = 0
             for i, emb in enumerate(embedding_list):
+                final += emb * ((i+1) / len(embedding_list))
+        elif self.JK == "learnable_sum":
+            final = 0
+            for i, emb in enumerate(embedding_list):
                 final += emb * self.sum_weight[i]
         elif self.JK == "skip":
             final = embedding_list[0] + embedding_list[-1]
@@ -239,9 +243,14 @@ class GNN_Node_Virtualnode(torch.nn.Module):
             node_representation = 0
             for layer in h_list:
                 node_representation += layer
-        elif self.JK == "weighted_sum":
+        elif self.JK == "learnable_sum":
             node_representation = 0
             for i, layer in enumerate(h_list):
                 node_representation += layer * self.sum_weight[i]
+        elif self.JK == "weighted_sum":
+            node_representation = 0
+            for i, layer in enumerate(h_list):
+                node_representation += layer * (i+1) / len(h_list)
+                # fixed weighted sum giving more emphasis to more recent layers
 
         return node_representation

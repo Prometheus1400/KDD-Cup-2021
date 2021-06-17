@@ -121,12 +121,12 @@ net = Net(
     gnn_type="gin",
     drop_ratio=0,
     graph_pooling="sum",
-    JK="weighted_sum",
+    JK="learnable_sum",
     residual=False,
-    virtual_node=False
+    virtual_node=True
 )
 net.to(device)
-# net.load_state_dict(torch.load("/GIN/Saves/GIN_VirtualNode.pth"))
+net.load_state_dict(torch.load("GIN/Saves/GIN_VirtualNode_learnable_weightedJKsum.pth"))
 
 criterion = torch.nn.L1Loss()
 optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
@@ -146,5 +146,11 @@ scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda
 # )
 evaluator = PCQM4MEvaluator()
 
-train(net, criterion, optimizer, 100, scheduler=scheduler, save=True, evaluator=None)
+# prints learnable weight tensor in GIN virtualnode
+# for name, param in net.named_parameters():
+#     if param.requires_grad:
+#         if name == "gnn_node.sum_weight":
+#             print(name, param.data)
+
+# train(net, criterion, optimizer, 100, scheduler=scheduler, save=True, evaluator=None)
 eval(net, evaluator)
