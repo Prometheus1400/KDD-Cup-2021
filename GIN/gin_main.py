@@ -88,8 +88,8 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None, evaluator=N
             scheduler.step()
 
     print("Finished Training")
-    if save:
-        torch.save(net.state_dict(), "GIN/Saves/GIN_weightedJKsum.pth")
+    if save != None:
+        torch.save(net.state_dict(), "GIN/Saves/" + save)
         print("Saved")
 
 
@@ -123,7 +123,7 @@ net = Net(
     graph_pooling="sum",
     JK="learnable_sum",
     residual=False,
-    virtual_node=True
+    virtual_node=True,
 )
 net.to(device)
 net.load_state_dict(torch.load("GIN/Saves/GIN_VirtualNode_learnable_weightedJKsum.pth"))
@@ -152,5 +152,5 @@ evaluator = PCQM4MEvaluator()
 #         if name == "gnn_node.sum_weight":
 #             print(name, param.data)
 
-# train(net, criterion, optimizer, 100, scheduler=scheduler, save=True, evaluator=None)
+train(net, criterion, optimizer, 1, scheduler=scheduler, save="name", evaluator=None)
 eval(net, evaluator)
