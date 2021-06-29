@@ -1,0 +1,7 @@
+Noisy Node GIN (auxiliary node classification task)
+    10 epochs: MAE = 0.20545126497745514
+    50 epochs:
+
+Pure GIN (no auxiliary tasks)
+    10 epochs: MAE = 0.2980470061302185
+    50 epochs: 
