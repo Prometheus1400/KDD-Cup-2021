@@ -8,6 +8,7 @@ from gin import Net
 
 import os
 import numpy as np
+import config
 
 
 def get_freer_gpu():
@@ -19,7 +20,7 @@ def get_freer_gpu():
     return np.argmax(memory_available)
 
 
-device = torch.device(f"cuda:{get_freer_gpu()}")
+config.device = torch.device(f"cuda:{get_freer_gpu()}")
 
 # smiles2graph takes a SMILES string as input and returns a graph object
 # requires rdkit to be installed.
@@ -46,7 +47,7 @@ test_loader = DataLoader(
 )
 
 
-def train(model, loss, optimizer, epochs, save=True, scheduler=None, evaluator=None):
+def train(model, criterion, optimizer, epochs, save=True, scheduler=None, evaluator=None):
     model.train()
     for epoch in range(epochs):  # loop over the dataset multiple times
         running_loss = 0.0
@@ -57,15 +58,21 @@ def train(model, loss, optimizer, epochs, save=True, scheduler=None, evaluator=N
             bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
         )
         for i, batch in enumerate(pbar):
-            batch = batch.to(device)
+            batch = batch.to(config.device)
 
             # zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            outputs = model(batch).view(-1,)
-            # print(outputs)
-            loss = criterion(outputs, batch.y)
+            outputs = model(batch)
+            pred = outputs[0].view(-1,)
+
+            if len(outputs) == 3:
+                node_emb = outputs[1]
+                labels = outputs[2] 
+            loss = criterion[0](pred, batch.y)
+            if len(outputs) == 3:
+                loss += criterion[1](node_emb, labels)
             loss.backward()
             optimizer.step()
 
@@ -99,8 +106,8 @@ def eval(model, evaluator):
         y_true = []
         y_pred = []
         for data in tqdm(valid_loader, desc="Evalutating"):
-            data = data.to(device)
-            outputs = model(data).view(-1)
+            data = data.to(config.device)
+            outputs = model(data)[0].view(-1)
             y_true.append(data.y.view(outputs.shape).detach().cpu())
             y_pred.append(outputs.detach().cpu())
 
@@ -116,19 +123,21 @@ def eval(model, evaluator):
 
 net = Net(
     num_tasks=1,
-    num_layers=5,
+    num_layers=32,
     emb_dim=300,
     gnn_type="gin",
     drop_ratio=0,
     graph_pooling="sum",
-    JK="learnable_sum",
+    JK="last",
     residual=False,
-    virtual_node=True,
+    virtual_node=False,
+    noisy_node=False,
 )
-net.to(device)
-net.load_state_dict(torch.load("GIN/Saves/GIN_VirtualNode_learnable_weightedJKsum.pth"))
+net.to(config.device)
+# net.load_state_dict(torch.load("GIN/Saves/GIN_VirtualNode_learnable_weightedJKsum.pth"))
 
-criterion = torch.nn.L1Loss()
+MAE = torch.nn.L1Loss()
+auxiliary_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 lmbda = lambda epoch: 0.25 ** epoch
 scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
@@ -152,5 +161,5 @@ evaluator = PCQM4MEvaluator()
 #         if name == "gnn_node.sum_weight":
 #             print(name, param.data)
 
-train(net, criterion, optimizer, 1, scheduler=scheduler, save="name", evaluator=None)
+train(net, [MAE,auxiliary_loss], optimizer, 10, scheduler=scheduler, save="10_epochs", evaluator=None)
 eval(net, evaluator)

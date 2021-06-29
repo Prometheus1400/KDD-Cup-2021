@@ -16,13 +16,15 @@ class Net(torch.nn.Module):
         drop_ratio=0,
         JK="last",
         graph_pooling="sum",
-        virtual_node=False
+        virtual_node=False,
+        noisy_node=False
     ):
         super(Net, self).__init__()
+        self.noisy_node = noisy_node
         if virtual_node:
             self.gnn_node = GNN_Node_Virtualnode(num_layers, emb_dim, drop_ratio, JK, residual, gnn_type)
         else:
-            self.gnn_node = GNN_Node(gnn_type, emb_dim, num_layers, drop_ratio, residual, JK)
+            self.gnn_node = GNN_Node(gnn_type, emb_dim, num_layers, drop_ratio, residual, JK, noisy_node)
         self.lin_graph_pred = torch.nn.Linear(emb_dim, num_tasks)
 
         if graph_pooling == "sum":
@@ -32,9 +34,11 @@ class Net(torch.nn.Module):
 
     def forward(self, data):
         n_emb = self.gnn_node(data)
-        g_emb = self.pool(n_emb, data.batch)
+        g_emb = self.pool(n_emb[0], data.batch)
         out = self.lin_graph_pred(g_emb)
         if not self.training:
             out = torch.clamp(out, min=0, max=50)
 
-        return out
+        if self.noisy_node and self.training:
+            return [out, n_emb[1], n_emb[2]]
+        return [out]

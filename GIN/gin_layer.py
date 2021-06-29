@@ -1,9 +1,13 @@
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 import torch
+from torch._C import device
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, degree
 from torch_geometric.nn import global_mean_pool, global_add_pool
 import torch.nn.functional as F
+import random
+import numpy as np
+import config
 
 
 class GIN_Layer(MessagePassing):
@@ -52,6 +56,7 @@ class GNN_Node(torch.nn.Module):
         dropout_ratio=0.4,
         residual=False,
         JK="last",
+        noisy_node=False,
     ):
         """ JK: Last, Sum """
         super(GNN_Node, self).__init__()
@@ -62,7 +67,17 @@ class GNN_Node(torch.nn.Module):
         self.dropout_ratio = dropout_ratio
         self.residual = residual
         self.JK = JK
-        self.atom_encoder = AtomEncoder(emb_dim)
+        self.noisy_node = noisy_node
+        # self.atom_encoder = AtomEncoder(emb_dim)
+        self.atom_encoder = torch.nn.Sequential(
+            torch.nn.Linear(9, emb_dim),
+            torch.nn.BatchNorm1d(emb_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(emb_dim, emb_dim),
+            torch.nn.BatchNorm1d(emb_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(emb_dim, emb_dim),
+        )
         # self.init_batch_norm = torch.nn.BatchNorm1d(emb_dim)
 
         self.convs = torch.nn.ModuleList()
@@ -75,9 +90,32 @@ class GNN_Node(torch.nn.Module):
                 ValueError(f"Undefined GNN type called {conv_type}")
             self.batch_norms.append(torch.nn.BatchNorm1d(emb_dim))
 
+        if self.noisy_node:
+            self.atom_decoder = torch.nn.Sequential(
+                torch.nn.Linear(emb_dim, emb_dim),
+                torch.nn.BatchNorm1d(emb_dim),
+                torch.nn.ReLU(),
+                torch.nn.Linear(emb_dim, emb_dim),
+                torch.nn.BatchNorm1d(emb_dim),
+                torch.nn.ReLU(),
+                torch.nn.Linear(emb_dim, 118)
+                # prediction for node label (atomic number)
+            )
+
     def forward(self, batched):
         """ recieves batched data which is decomposed """
         x, edge_index, edge_attr = batched.x, batched.edge_index, batched.edge_attr
+        x = x.float()
+        if self.noisy_node and self.training:
+            # labels = torch.zeros((len(x), 118), device=config.device, dtype=torch.long)
+            labels = x[:, 0].long()  # hopefully the atomic number of each atom
+            labels.subtract(1)
+            # subtract 1 so that atomic number 1 corresponds to index 0. i.e. H -> [1, 0, 0,...,0]
+            for i in range(len(x)):
+                num = random.randint(0, 99)
+                if num <= 5:
+                    noise_arr = (torch.randint(low=0,high=4000,size=(1, 9),device=config.device,dtype=x.dtype,)[0] / 1000)
+                    x[i] *= noise_arr
 
         embedding_list = [self.atom_encoder(x)]
         for layer in range(self.num_layers):
@@ -103,7 +141,7 @@ class GNN_Node(torch.nn.Module):
         elif self.JK == "weighted_sum":
             final = 0
             for i, emb in enumerate(embedding_list):
-                final += emb * ((i+1) / len(embedding_list))
+                final += emb * ((i + 1) / len(embedding_list))
         elif self.JK == "learnable_sum":
             final = 0
             for i, emb in enumerate(embedding_list):
@@ -113,7 +151,9 @@ class GNN_Node(torch.nn.Module):
         else:
             ValueError(f"Invalid JK connetion: {self.JK}")
 
-        return final
+        if self.noisy_node and self.training:
+            return [final, self.atom_decoder(embedding_list[-1]), labels]
+        return [final]
 
 
 ### Virtual GNN to generate node embedding
@@ -250,7 +290,7 @@ class GNN_Node_Virtualnode(torch.nn.Module):
         elif self.JK == "weighted_sum":
             node_representation = 0
             for i, layer in enumerate(h_list):
-                node_representation += layer * (i+1) / len(h_list)
+                node_representation += layer * (i + 1) / len(h_list)
                 # fixed weighted sum giving more emphasis to more recent layers
 
         return node_representation
