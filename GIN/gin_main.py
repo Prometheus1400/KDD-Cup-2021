@@ -9,6 +9,7 @@ from gin import Net
 import os
 import numpy as np
 import config
+import pickle
 
 
 def get_freer_gpu():
@@ -30,11 +31,11 @@ config.device = torch.device(f"cuda:{get_freer_gpu()}")
 # convert each SMILES string into a molecular graph object by calling smiles2graph
 # This takes a while (a few hours) for the first run
 dataset = PygPCQM4MDataset(
-    root="/data3/kaleb.dickerson2001/Datasets/KDD-pyg-dataset",
+    root="/data3/kaleb.dickerson2001/Datasets/OGB-LSC-3D",
     smiles2graph=smiles2graph,
 )
 
-split_idx = dataset.get_idx_split()
+split_idx = pickle.load(open("/data3/kaleb.dickerson2001/Datasets/OGB-LSC-3D/pcqm4m_kddcup2021/split_idx3D.p", "rb" ))
 batch_size = 256
 train_loader = DataLoader(
     dataset[split_idx["train"]], batch_size=batch_size, shuffle=True
@@ -96,7 +97,7 @@ def train(model, criterion, optimizer, epochs, save=True, scheduler=None, evalua
 
     print("Finished Training")
     if save != None:
-        torch.save(net.state_dict(), "GIN/Saves/" + save)
+        torch.save(net.state_dict(), "GIN/Saves/" + save + ".pth")
         print("Saved")
 
 
@@ -107,6 +108,9 @@ def eval(model, evaluator):
         y_pred = []
         for data in tqdm(valid_loader, desc="Evalutating"):
             data = data.to(config.device)
+            # TEMP
+            for i in range(69):
+                print(data.x[-i])
             outputs = model(data)[0].view(-1)
             y_true.append(data.y.view(outputs.shape).detach().cpu())
             y_pred.append(outputs.detach().cpu())
@@ -131,10 +135,9 @@ net = Net(
     JK="last",
     residual=False,
     virtual_node=False,
-    noisy_node=False,
 )
 net.to(config.device)
-# net.load_state_dict(torch.load("GIN/Saves/GIN_VirtualNode_learnable_weightedJKsum.pth"))
+# net.load_state_dict(torch.load("GIN/Saves/50_epochs_noisynodes"))
 
 MAE = torch.nn.L1Loss()
 auxiliary_loss = torch.nn.CrossEntropyLoss()
@@ -161,5 +164,5 @@ evaluator = PCQM4MEvaluator()
 #         if name == "gnn_node.sum_weight":
 #             print(name, param.data)
 
-train(net, [MAE,auxiliary_loss], optimizer, 10, scheduler=scheduler, save="10_epochs", evaluator=None)
-eval(net, evaluator)
+train(net, [MAE,auxiliary_loss], optimizer, 10, scheduler=scheduler, save=None, evaluator=None)
+# eval(net, evaluator)

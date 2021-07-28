@@ -70,7 +70,7 @@ class GNN_Node(torch.nn.Module):
         self.noisy_node = noisy_node
         # self.atom_encoder = AtomEncoder(emb_dim)
         self.atom_encoder = torch.nn.Sequential(
-            torch.nn.Linear(9, emb_dim),
+            torch.nn.Linear(12, emb_dim),
             torch.nn.BatchNorm1d(emb_dim),
             torch.nn.ReLU(),
             torch.nn.Linear(emb_dim, emb_dim),
@@ -78,7 +78,6 @@ class GNN_Node(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(emb_dim, emb_dim),
         )
-        # self.init_batch_norm = torch.nn.BatchNorm1d(emb_dim)
 
         self.convs = torch.nn.ModuleList()
         self.batch_norms = torch.nn.ModuleList()
